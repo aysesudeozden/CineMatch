@@ -1,0 +1,2 @@
+
+#! Sude'nin arayüz fonksiyonları

@@ -1,0 +1,2 @@
+
+#! Batuhan'ın LLM kodları
