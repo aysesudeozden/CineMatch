@@ -13,18 +13,3 @@ CineMatch-AI/
 ├── requirements.txt    # Kütüphane listesi
 ├── .gitignore          # (Zaten harika bir tane hazırladık)
 └── README.md           # Projenin vitrini
-
-Vers2
-
-CineMatch-AI/
-├── backend/            # Senin ve Enes'in bölgesi (Python)
-│   ├── src/
-│   │   ├── recommender.py
-│   │   └── main.py     # API'yi (FastAPI/Flask) başlatan yer
-│   ├── data/
-│   └── requirements.txt
-├── frontend/           # Sude'nin bölgesi (React/Next.js)
-│   ├── components/
-│   ├── pages/
-│   └── package.json
-└── README.md

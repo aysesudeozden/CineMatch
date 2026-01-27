@@ -1,5 +1,21 @@
 # CineMatch
 
+## 🏗️ Proje Yapısı
+- **Backend (Python/FastAPI):** Öneri algoritması ve veritabanı.
+- **Frontend (Next.js/React):** AI Chatbot arayüzü ve kullanıcı etkileşimi.
+
+## 👥 Ekip & Görevler
+
+- **Owner/Backend A (Adal):** Öneri motoru ve sistem mimarisi.
+- **Data (Dilara):** Kaggle veri temizleme.
+- **Frontend (Sude):** Next.js UI geliştirme.
+- **AI (Batuhan):** LLM entegrasyonu.
+- **Backend B (Enes):** Kullanıcı profilleri ve DB.
+
+## 🕒 Deadline
+
+30.01.2026 - 13:05
+
 **Kullanıcı tercihlerine göre film öneren AI destekli sistem.**
 
 ## 🚀 Kurulum
@@ -11,11 +27,3 @@
 ## 🛠️ Kullanım
 
 `python main.py` komutu ile sistemi başlatın.
-
-## 👥 Ekip ve Roller
-
-* **Dilara**: Data Engineer (Veri temizleme ve CSV hazırlama)
-* **Sude**: Frontend/UI (Kullanıcı etkileşimi ve CLI)
-* **Adal**: Recommender Logic (Benzerlik algoritması)
-* **Batuhan**: AI Integration (LLM özetleri ve trend analizi)
-* **Enes**: Backend B (Kullanıcı profilleri ve veritabanı yönetimi)
