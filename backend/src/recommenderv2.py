@@ -1,5 +1,5 @@
 
-#! Adal'ın algoritması - Versiyon 3.0 (Genre, Popularity, Year gibi detaylar da ekli.)
+#! Adal'ın algoritması - Versiyon 2.0 (Metadata Destekli)
 
 # ---------------------------------
 # Hazırlık (Kütüphaneler)
@@ -8,13 +8,10 @@ import pandas as pd # Python'un Excel'i olarak Pandas Kütüphanesi. Veriyi tabl
 #* Neden: .csv dosyasını okuyup hafızada tutmak için.
 import os # İşletim sistemiyle konuşur. "Şu dosya orada mı?" kontrolünü yapar. OS Neydi? OS emekti. OS yani Operating System.
 #* Neden: Dosya yolu (path) hatalarını önlemek için.
-import numpy as np  # Matematiksel ağırlıklandırma için şart.
-import re # Metin temizliği için
 from sklearn.feature_extraction.text import CountVectorizer # Kelime sayıcı. Metinleri bilgisayarın anlayacağı sayılara (vektörlere) çevirir.
 #* Neden: Bilgisayar kelimelerden anlamaz, "1" ve "0"dan anlar. Çevirici lazım.
 from sklearn.metrics.pairwise import cosine_similarity # İki sayı dizisi arasındaki benzerliği ölçer.
 #* Neden: Hangi filmin diğerine ne kadar benzediğini matematiksel olarak hesaplamak için.
-from sklearn.preprocessing import MinMaxScaler # Her sütundaki en küçük sayıya 0, en büyük sayıya 1 der. Aradakileri de orantılar. Her şeyi 0 ile 1 arasına hapseder.
 
 # ---------------------------------
 # Kalıbı Kurmak (Class ve Init)
@@ -28,7 +25,6 @@ class MovieRecommender: # Recommender motorumuz.
         self.data_path = data_path # Dosyanın nerede olduğunu hafızaya atar. Beyin bedava.
         self.df = None # Verisizken patlamayalım. Henüz yüklemedik çünkü de veriyi destur.
         self.similarity_matrix = None # Henüz hesaplama yapmadık, sonuçlar için yer ayırdık.
-        self.normalized_df = None # Sayısal verilerin tutulacağı yer
         #* Neden inite ekliyoruz peki?
         #* Çünkü canısı motor başlar başlamaz ağır işlemleri yapıp bilgisayarı kilitlemeyelim. Veriyi sonra yükleyeceğiz (Lazy Loading).
 
@@ -37,73 +33,36 @@ class MovieRecommender: # Recommender motorumuz.
 # ---------------------------------
     def load_data(self):
             """
-            Veriyi yükler ve sayısal sütunları (Yıl, Puan, Popülerlik)
-            matematiksel işlem için 0-1 arasına sıkıştırır (Normalization).
+            Yeni veri setini yükler ve kontrol eder.
             """
             if os.path.exists(self.data_path): # Burdaki amaç: Kör uçuş yapmamak. Dosya orada yoksa programın çökmesini engeller.
-            
-            # 1. Adım: Dosyayı oku
+
                 self.df = pd.read_csv(self.data_path) # CSV dosyasındaki virgülle ayrılmış yazıları alır, satır ve sütunlardan oluşan bir tabloya (DataFrame) çevirir.
                 print(f"✅ Dosya yüklendi! Toplam Film: {len(self.df)}")
-
-            # 2. Adım: Veri Temizliği 
-
-            # Tarihten sadece YILI çekiyoruz. Hatalı tarih varsa 0 yapıyoruz.
-                self.df['year'] = pd.to_datetime(self.df['release_date'], errors='coerce').dt.year.fillna(0)
-
-            # Puan ve Popülerlikteki boş yerlere 0 yazalım ki hesap yaparken hata vermesin.
-                self.df['popularity'] = self.df['popularity'].fillna(0)
-                self.df['vote_average'] = self.df['vote_average'].fillna(0)
-
-            # 3. Normalization (0-1 Sıkıştırma İşlemi)
-                scaler = MinMaxScaler()
-
-            # Hangi sütunları sıkıştıracağız?
-                cols_to_scale = ['popularity', 'vote_average', 'year']
-
-            # İşlemi yap ve 'normalized_df' içine kaydet
-                scaled_data = scaler.fit_transform(self.df[cols_to_scale])
-                self.normalized_df = pd.DataFrame(scaled_data, columns=cols_to_scale)
-            
-                print("📊 Sayısal veriler (Popülerlik, Puan, Yıl) 0-1 arasına normalize edildi.")
+                print("Örnek veri (ilk satır):")
+                print(self.df.iloc[0]['llm_metadata']) # Buradaki amaç, verinin doğru formatta gelip gelmediğini gözle teyit etmek.
 
             else:
-                print("❌ Dosya bulunamadı! Yolu kontrol et.")
+                print("❌ Dosya bulunamadı!")
 
 # ---------------------------------
 # Beyin (Matris Oluşturma)
 # ---------------------------------
     def create_similarity_matrix(self): # Burası projenin beyni 
         """
-        Hem kelimelere (Text) hem de sayılara (Metadata) bakarak
-        Hibrit bir benzerlik matrisi oluşturur.
+        Artık sadece türlere değil, llm_metadata içindeki tüm bilgilere
+        (Tür, Yıl, Puan, Popülerlik) bakarak benzerlik kuruyoruz.
         """
-        # 1. Adım: Metin Hazırlığı
-        def clear_text(text):
-            return re.sub(r'\b\d{4}\b', '', str(text))
-
-        # Metadata içindeki yılları siliyoruz. Çünkü yılı zaten ayrıca hesaplayacağız.
-        # llm_metadata sütununu temizle
-        clean_metadata = self.df['llm_metadata'].fillna('').apply(clear_text)
-
-        # 2. Adım: Metin Benzerliği
-        cv = CountVectorizer()
-        text_matrix = cv.fit_transform(clean_metadata)
+        # Türkçe ve İngilizce kelimeleri analiz edecek
+        cv = CountVectorizer() # Kelime sayma machine
         
-        # Sadece kelimelere göre benzerlik (0 ile 1 arası)
-        text_sim = cosine_similarity(text_matrix)
-        print("🔤 Metin tabanlı benzerlik hesaplandı.")
-
-        # 3. Adım: Sayısal Benzerlik
-
-        num_sim = cosine_similarity(self.normalized_df) # Popülerlik, Puan ve Yıl açısından ne kadar benziyorlar?
-        print("🔢 Sayısal veriye dayalı benzerlik hesaplandı.")
-
-        # 4. Adım HİBRİT KARIŞIM
-        # %70 Metin (Konu) + %30 Sayısal (Puan/Yıl)
-        self.similarity_matrix = (text_sim * 0.85) + (num_sim * 0.15)
+        #* self.df['llm_metadata'].fillna(''): Tablodaki llm_metadata sütununu alıyoruz ve boş bir hücre varsa hata vermesin diye orayı boşlukla dolduruyoruz (fillna).
+        #* cv.fit_transform(...): Tüm filmlerin açıklamalarını alıyor ve devasa bir sayı tablosuna çeviriyor.
+        count_matrix = cv.fit_transform(self.df['llm_metadata'].fillna(''))
         
-        print(f"🧠 HİBRİT Benzerlik Matrisi oluşturuldu! (Boyut: {self.similarity_matrix.shape})")
+        #* cosine_similarity(count_matrix): Her filmin sayı dizisini diğerleriyle karşılaştırır.
+        self.similarity_matrix = cosine_similarity(count_matrix)
+        print("📊 Gelişmiş Benzerlik Matrisi oluşturuldu!")
 
 # ---------------------------------
 # Cevap Verme (get_recommendations)
@@ -123,7 +82,6 @@ class MovieRecommender: # Recommender motorumuz.
                 return [f"Üzgünüm, veritabanımızda '{movie_title}' diye bir film bulamadım. Başka bir tane dener misin?"]
             # -----------------------
 
-            # Filmin satır numarasını (indeksini) al
             idx = self.df[mask].index[0] # idx: Bulunan filmin satır numarası
             
             # 3. Benzerlik puanlarını al ve sırala
@@ -133,16 +91,12 @@ class MovieRecommender: # Recommender motorumuz.
             sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
             
             # 4. En iyi 5 filmi seç (İlk film kendisi olduğu için [1:6] alıyoruz)
-            # x[0] filmin satır numarasıdır. Eğer satır numarası idx (aranan film) değilse listeye al.
-            sim_scores = [x for x in sim_scores if x[0] != idx]
-            sim_scores = sim_scores[:5]
+            sim_scores = sim_scores[1:6]
 
-            # 5. Sonuçları hazırla: Dönüşüm (Hayır kafkanınki değil)
+            # Dönüşüm (Hayır kafkanınki değil)
             movie_indices = [i[0] for i in sim_scores]
-
-            # Sonuçları liste biçiminde döndür
-            movie_titles = self.df['title'].iloc[movie_indices].fillna('İsimsiz Film').tolist()
-            return movie_titles
+            # Sonuçları 'original_title' olarak döndür
+            return self.df['original_title'].iloc[movie_indices].tolist()
             
         except Exception as e:
             return [f"Bir hata oluştu: {str(e)}"]
@@ -151,25 +105,22 @@ class MovieRecommender: # Recommender motorumuz.
 # TEST BLOĞU
 # ---------------------------------
 if __name__ == "__main__":
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = os.path.dirname(__file__)
     
-    # EĞER data klasörü backend'in içindeyse bunu kullan:
-    yol = os.path.join(current_dir, '..', 'data', 'movies_with_metadata.csv')
+    # YENİ DOSYA İSMİ BURADA:
+    yol = os.path.abspath(os.path.join(current_dir, '..', 'data', 'movies_with_metadata.csv'))
     
-    # EĞER dosya bulunamazsa bir de kök dizine bak diyelim (Garantiye alalım):
-    if not os.path.exists(yol):
-        yol = os.path.join(current_dir, '..', '..', 'data', 'movies_with_metadata.csv')
-
-    print(f"🔍 Denenen dosya yolu: {yol}")
-
     adal_motoru = MovieRecommender(yol)
     adal_motoru.load_data()
     
+    # Sadece veri yüklendiyse devam et
     if adal_motoru.df is not None:
         adal_motoru.create_similarity_matrix()
-        test_film = input("\n🎥 Hangi filmi çok sevdin?: ")
+        
+        # Test edelim: (inputla test, ama 2000e kadar idi veriler test aşamasında.)
+        test_film = input("Film ismi: ")
+        print(f"\n🎬 '{test_film}' için Adal'ın Önerileri:")
         oneriler = adal_motoru.get_recommendations(test_film)
         
-        print(f"\n✨ '{test_film}' Seven Bunları da Sevdi:")
         for i, film in enumerate(oneriler, 1):
             print(f"{i}. {film}")
