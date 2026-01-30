@@ -4,7 +4,7 @@ CineMatch-AI/
 │   └── processed/      # Dilara'nın temizlediği son hali
 ├── src/                # Asıl kodların olduğu yer
 │   ├── __init__.py
-│   ├── recommender.py  # Senin algoritman
+│   ├── recommender.py  # Adal'ın algoritması
 │   ├── database.py     # Enes'in kullanıcı verilerini yönettiği yer
 │   ├── ai_engine.py    # Batuhan'ın LLM kodları
 │   └── ui.py           # Sude'nin arayüz fonksiyonları
@@ -17,7 +17,7 @@ CineMatch-AI/
 Vers2
 
 CineMatch-AI/
-├── backend/            # Senin ve Enes'in bölgesi (Python)
+├── backend/            # Adal'ın ve Enes'in bölgesi (Python)
 │   ├── src/
 │   │   ├── recommender.py
 │   │   └── main.py     # API'yi (FastAPI/Flask) başlatan yer
