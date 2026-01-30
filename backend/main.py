@@ -1,2 +1,0 @@
-
-#! Uygulamayı başlatan ana dosya
