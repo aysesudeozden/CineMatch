@@ -1,6 +1,7 @@
 # CineMatch
 
 ## 🏗️ Proje Yapısı
+
 - **Backend (Python/FastAPI):** Öneri algoritması ve veritabanı.
 - **Frontend (Next.js/React):** AI Chatbot arayüzü ve kullanıcı etkileşimi.
 
