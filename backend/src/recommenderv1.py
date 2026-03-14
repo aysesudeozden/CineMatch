@@ -84,7 +84,7 @@ if __name__ == "__main__":
     adal_motoru.create_similarity_matrix()
     
     # Gerçekten oluştu mu? Boyutuna bakalım:
-    print(f"✅ Matris Hazır! Boyut: {adal_motoru.similarity_matrix.shape}") #Burada veriyi elde ettik aslında.
+    print(f" Matris Hazır! Boyut: {adal_motoru.similarity_matrix.shape}") #Burada veriyi elde ettik aslında.
 
     #Gelen veriyle konuşmamız lazım; bakalım motorumuz çalışıyor mu?
     test_film = "     toy story      " # Veritabanında olduğundan emin olduğun bir film yaz
@@ -94,6 +94,6 @@ if __name__ == "__main__":
     test_film = "toy story" 
     oneriler = adal_motoru.get_recommendations(test_film)
     
-    print(f"\n🎬 '{test_film}' için öneriler:")
+    print(f"\n '{test_film}' için öneriler:")
     for i, film in enumerate(oneriler, 1):
         print(f"{i}. {film}")
