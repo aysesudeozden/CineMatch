@@ -1,4 +1,5 @@
 import os
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from dotenv import load_dotenv
@@ -55,13 +56,18 @@ async def get_db():
         yield session
 
 async def init_db():
-    """Veritabanı tablolarını oluştur"""
-    # Gerekli modelleri içe aktar
+    """Veritabanı bağlantısını doğrula"""
+    # Gerekli modelleri içe aktar (Metadata kaydı için gerekebilir)
     import backend.src.models_pg
-    async with engine.begin() as conn:
-        # Uyarı: Prod ortamında otomatik tablo oluşturucu yerine Alembic (migration aracı) önerilir
-        await conn.run_sync(Base.metadata.create_all)
-    print("PostgreSQL veritabanı tabloları kontrol edildi/oluşturuldu.")
+    try:
+        async with engine.begin() as conn:
+            # Sadece bağlantıyı test et, tablo oluşturma işlemini kullanıcı manuel yapmış varsayıyoruz.
+            # Eğer tablolar yoksa ve oluşturulması gerekiyorsa aşağıdaki satır yorumdan çıkarılabilir:
+            # await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("SELECT 1"))
+        print("PostgreSQL bağlantısı doğrulandı.")
+    except Exception as e:
+        print(f"PostgreSQL bağlantı hatası: {e}")
 
 async def close_db():
     await engine.dispose()

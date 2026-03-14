@@ -1,6 +1,6 @@
 """
 CineMatch FastAPI Backend
-MongoDB ile film öneri sistemi backend API'si
+PostgreSQL (Neon.tech) ile film öneri sistemi backend API'si
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 # FastAPI uygulaması oluştur
 app = FastAPI(
     title="CineMatch API",
-    description="Film öneri sistemi için MongoDB tabanlı REST API",
+    description="Film öneri sistemi için PostgreSQL tabanlı REST API",
     version="1.0.0",
     lifespan=lifespan
 )
