@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, ARRAY, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, ARRAY
 from sqlalchemy.orm import relationship
 from backend.src.db_pg import Base
 
@@ -6,7 +6,7 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, unique=True, index=True, nullable=False)
+    user_id = Column(Integer, unique=True, index=True)
     full_name = Column(String, nullable=True)
     email = Column(String, unique=True, index=True)
     password = Column(String)  # In real world, hash this!
@@ -19,7 +19,7 @@ class Movie(Base):
     __tablename__ = "movies"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    movieId = Column(Integer, unique=True, index=True, nullable=False) # Eşdeğer ID (Dataset ID)
+    movieId = Column(Integer, unique=True, index=True) # Eşdeğer ID (Dataset ID)
     title = Column(String, index=True)
     original_title = Column(String, nullable=True)
     original_language = Column(String, nullable=True)
@@ -32,7 +32,7 @@ class Movie(Base):
     overview = Column(String, nullable=True)
     
     # Optional / Extra fields for LLM mappings
-    llm_metadata = Column(JSON, nullable=True)
+    llm_metadata = Column(String, nullable=True)
     
     interactions = relationship("Interaction", back_populates="movie")
 
@@ -40,7 +40,7 @@ class Movie(Base):
 class Genre(Base):
     __tablename__ = "genres"
     
-    genre_id = Column(Integer, primary_key=True, index=True, unique=True)
+    genre_id = Column(Integer, primary_key=True, index=True)
     genre_name = Column(String, unique=True)
 
 
