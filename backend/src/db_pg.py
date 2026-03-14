@@ -24,6 +24,22 @@ if not DATABASE_URL:
 if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+# asyncpg, sslmode ve channel_binding gibi parametreleri query string'de desteklemez.
+# Bu parametreleri temizleyelim.
+if "?" in DATABASE_URL:
+    base_url, query = DATABASE_URL.split("?", 1)
+    # sslmode=require varsa ssl=require olarak kalsın veya SQLAlchemy'ye bırakalım
+    # Neon için genelde parametresiz de çalışır çünkü SSL zorunludur.
+    # Ama en güvenlisi desteklenmeyenleri silmek.
+    import urllib.parse
+    params = urllib.parse.parse_qs(query)
+    # asyncpg için sorun çıkaranları temizle
+    params.pop('sslmode', None)
+    params.pop('channel_binding', None)
+    
+    new_query = urllib.parse.urlencode(params, doseq=True)
+    DATABASE_URL = f"{base_url}?{new_query}" if new_query else base_url
+
 engine = create_async_engine(DATABASE_URL, echo=False)
 
 # Session factory
