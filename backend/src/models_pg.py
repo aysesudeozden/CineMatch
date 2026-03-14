@@ -6,7 +6,7 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, unique=True, index=True)
+    user_id = Column(Integer, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
     email = Column(String, unique=True, index=True)
     password = Column(String)  # In real world, hash this!
@@ -19,7 +19,7 @@ class Movie(Base):
     __tablename__ = "movies"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    movieId = Column(Integer, unique=True, index=True) # Eşdeğer ID (Dataset ID)
+    movieId = Column(Integer, unique=True, index=True, nullable=False) # Eşdeğer ID (Dataset ID)
     title = Column(String, index=True)
     original_title = Column(String, nullable=True)
     original_language = Column(String, nullable=True)
@@ -40,7 +40,7 @@ class Movie(Base):
 class Genre(Base):
     __tablename__ = "genres"
     
-    genre_id = Column(Integer, primary_key=True, index=True)
+    genre_id = Column(Integer, primary_key=True, index=True, unique=True)
     genre_name = Column(String, unique=True)
 
 
