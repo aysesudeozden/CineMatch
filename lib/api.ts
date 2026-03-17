@@ -77,7 +77,7 @@ export interface Genre {
 
 // Helper to get movie ID from various possible field names
 export function getMovieId(movie: Movie): number {
-    return Number(movie.movieId || movie.id || movie.movieid || 0);
+    return movie.movieId || movie.id || 0;
 }
 
 // API Functions
