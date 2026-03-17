@@ -18,12 +18,8 @@ async def lifespan(app: FastAPI):
     """Uygulama başlangıç ve kapanış olayları"""
     # Başlangıç
     await init_db()
-    
-    # Öneri motorunu hazırla
-    from backend.src.recommender import engine
-    import asyncio
-    asyncio.create_task(engine.refresh_data())
-    
+    # Öneri motorunu burada başlatmıyoruz (Vercel memory/timeout sınırları için)
+    # İlk kullanımda (lazy-loading) yüklenecek.
     yield
     
     # Kapanış
@@ -42,7 +38,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Vercel deployment ve local için geniş izin
-    allow_credentials=True,
+    allow_credentials=False, # allow_origins="*" ise bu False olmalı
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -70,6 +66,19 @@ async def root():
 async def health_check():
     """Sağlık kontrolü endpoint'i"""
     return {"status": "healthy", "service": "CineMatch API"}
+
+
+@app.get("/api/db-test")
+async def db_test():
+    """Veritabanı bağlantı testi"""
+    from sqlalchemy import text
+    from backend.src.db_pg import engine
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+            return {"status": "success", "message": "Database connection verified!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 if __name__ == "__main__":

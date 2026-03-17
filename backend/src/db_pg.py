@@ -39,7 +39,7 @@ if "?" in DATABASE_URL:
     # sslmode=require varsa veya Neon hostuysa SSL'i zorunlu tutalım
     is_neon = "neon.tech" in base_url
     if 'sslmode' in params or is_neon:
-        connect_args["ssl"] = "require"
+        connect_args["ssl"] = True
     
     # asyncpg için sorun çıkaranları temizle
     params.pop('sslmode', None)
@@ -47,8 +47,8 @@ if "?" in DATABASE_URL:
     
     new_query = urllib.parse.urlencode(params, doseq=True)
     DATABASE_URL = f"{base_url}?{new_query}" if new_query else base_url
-elif "neon.tech" in DATABASE_URL:
-    connect_args["ssl"] = "require"
+elif DATABASE_URL and "neon.tech" in DATABASE_URL:
+    connect_args["ssl"] = True
 
 engine = create_async_engine(DATABASE_URL, echo=False, connect_args=connect_args)
 
