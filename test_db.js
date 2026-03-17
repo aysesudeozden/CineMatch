@@ -11,9 +11,11 @@ const pool = createPool({
 async function test() {
   console.log("Connecting to:", process.env.DATABASE_URL ? "URL present" : "URL MISSING");
   try {
-    const { rows } = await pool.query('SELECT title FROM movies LIMIT 5');
-    console.log("Success! Sample movies:");
-    rows.forEach(r => console.log("- " + r.title));
+    const moviesRes = await pool.query('SELECT * FROM movies LIMIT 1');
+    console.log("Movies columns:", Object.keys(moviesRes.rows[0] || {}));
+    
+    const genresRes = await pool.query('SELECT * FROM movie_genres LIMIT 1');
+    console.log("Movie-Genres columns:", Object.keys(genresRes.rows[0] || {}));
   } catch (err) {
     console.error("DB Error:", err);
   } finally {

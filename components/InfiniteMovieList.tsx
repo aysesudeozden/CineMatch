@@ -65,9 +65,29 @@ export default function InfiniteMovieList({
     }
   }, [inView, loading, hasMore]);
 
+  useEffect(() => {
+    const handleScroll = () => {
+      if (loading || !hasMore) return;
+      
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+      const clientHeight = document.documentElement.clientHeight;
+      
+      // If we are within 500px of the bottom
+      if (scrollTop + clientHeight >= scrollHeight - 500) {
+        console.log("[InfiniteMovieList] Scroll threshold met (Fallback)");
+        loadMoreMovies();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loading, hasMore]);
+
   // If initialMovies was empty, retry once
   useEffect(() => {
     if (movies.length === 0 && hasMore && !loading) {
+        console.log("[InfiniteMovieList] Initial movies empty, retrying...");
         loadMoreMovies();
     }
   }, []);

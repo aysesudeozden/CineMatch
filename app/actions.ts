@@ -25,11 +25,23 @@ export async function fetchMoviesAction(offset: number = 0, limit: number = 20, 
       paramIndex = 2;
     }
 
-    query += ` ORDER BY "popularity" DESC NULLS LAST LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    query += ` ORDER BY "popularity" DESC NULLS LAST, "movieId" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
 
-    const { rows } = await pool.query<Movie>(query, params);
-    console.log(`[Server Action] Fetched ${rows.length} movies.`);
-    return rows;
+    const { rows } = await pool.query<any>(query, params);
+    
+    // Normalize rows (DB might return lowercase or snake_case)
+    const normalizedRows = rows.map(r => ({
+      ...r,
+      movieId: r.movieId || r.movieid || r.id,
+      poster_url: r.poster_url || r.posterurl || r.image_url,
+      release_date: r.release_date || r.releasedate,
+      vote_average: Number(r.vote_average || r.voteaverage || r.rating || 0),
+      llm_metadata: r.llm_metadata || r.llmmetadata || r.overview,
+      title: r.title || r.isim,
+    })) as Movie[];
+
+    console.log(`[Server Action] Fetched ${normalizedRows.length} movies (offset: ${offset}).`);
+    return normalizedRows;
   } catch (error) {
     console.error("[Server Action] Failed to fetch movies:", error);
     return [];
