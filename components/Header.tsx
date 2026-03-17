@@ -203,6 +203,9 @@ export default function Header() {
           </div>
 
           <nav style={styles.nav}>
+            <Link href="/movies" style={styles.navLink}>
+              Tüm Filmler
+            </Link>
             <div style={{ position: 'relative' }}>
               <div
                 style={styles.profileBtn}

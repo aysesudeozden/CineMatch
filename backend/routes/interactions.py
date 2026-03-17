@@ -14,15 +14,10 @@ router = APIRouter(prefix="/api/interactions", tags=["interactions"])
 
 
 @router.get("")
-async def get_all_interactions(
-    skip: int = 0, 
-    limit: int = 100, 
-    db: AsyncSession = Depends(get_db)
-) -> List[Dict[str, Any]]:
-    """Tüm etkileşimleri getir (sayfalama ile)"""
+async def get_all_interactions(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
+    """Tüm etkileşimleri getir"""
     try:
-        stmt = select(Interaction).offset(skip).limit(limit)
-        result = await db.execute(stmt)
+        result = await db.execute(select(Interaction))
         interactions = result.scalars().all()
         return [{"_id": str(i.id), **{k: v for k, v in i.__dict__.items() if k != "_sa_instance_state"}} for i in interactions]
     except Exception as e:
@@ -30,16 +25,10 @@ async def get_all_interactions(
 
 
 @router.get("/user/{user_id}")
-async def get_user_interactions(
-    user_id: int, 
-    skip: int = 0, 
-    limit: int = 100, 
-    db: AsyncSession = Depends(get_db)
-) -> List[Dict[str, Any]]:
-    """Belirli bir kullanıcının etkileşimlerini getir (sayfalama ile)"""
+async def get_user_interactions(user_id: int, db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
+    """Belirli bir kullanıcının etkileşimlerini getir"""
     try:
-        stmt = select(Interaction).where(Interaction.user_id == user_id).offset(skip).limit(limit)
-        result = await db.execute(stmt)
+        result = await db.execute(select(Interaction).where(Interaction.user_id == user_id))
         interactions = result.scalars().all()
         return [{"_id": str(i.id), **{k: v for k, v in i.__dict__.items() if k != "_sa_instance_state"}} for i in interactions]
     except Exception as e:
