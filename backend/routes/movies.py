@@ -56,7 +56,7 @@ async def get_all_movies(
         movies = result.scalars().all()
         
         # Pydantic dict format
-        return [{"_id": str(m.id), **m.__dict__} for m in movies]
+        return [{"_id": str(m.id), **{k: v for k, v in m.__dict__.items() if k != "_sa_instance_state"}} for m in movies]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Filmler getirilirken hata: {str(e)}")
 
@@ -72,7 +72,7 @@ async def get_movie_by_id(movie_id: int, db: AsyncSession = Depends(get_db)) -> 
         if not movie:
             raise HTTPException(status_code=404, detail=f"Film bulunamadı: {movie_id}")
         
-        return {"_id": str(movie.id), **movie.__dict__}
+        return {"_id": str(movie.id), **{k: v for k, v in movie.__dict__.items() if k != "_sa_instance_state"}}
     except HTTPException:
         raise
     except Exception as e:
@@ -96,6 +96,6 @@ async def search_movies(
         result = await db.execute(stmt)
         movies = result.scalars().all()
         
-        return [{"_id": str(m.id), **m.__dict__} for m in movies]
+        return [{"_id": str(m.id), **{k: v for k, v in m.__dict__.items() if k != "_sa_instance_state"}} for m in movies]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Arama yapılırken hata: {str(e)}")

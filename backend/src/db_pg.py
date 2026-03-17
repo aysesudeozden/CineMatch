@@ -21,9 +21,12 @@ if not DATABASE_URL:
     # Fallback to empty string to avoid crash during import, but will fail on connection
     DATABASE_URL = ""
 
-# asyncpg uyumluluğu için postgresql://'i postgresql+asyncpg://'e çeviriyoruz
-if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+# asyncpg uyumluluğu için postgresql:// veya postgres://'i postgresql+asyncpg://'e çeviriyoruz
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgresql://"):
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 
 # asyncpg, sslmode ve channel_binding gibi parametreleri query string'de desteklemez.
 # Bu parametreleri temizleyelim ve Neon için gerekli olan SSL ayarını düzgün yapalım.
