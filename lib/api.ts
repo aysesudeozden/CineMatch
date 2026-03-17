@@ -27,7 +27,7 @@ async function fetchAPI<T>(endpoint: string): Promise<T> {
     return response.json();
 }
 
-// Movie type - flexible to handle various MongoDB field names
+// Movie type - flexible to handle vars MongoDB ioufield names
 export interface Movie {
     _id?: string;
     movieId?: number;
