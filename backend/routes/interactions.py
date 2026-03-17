@@ -14,10 +14,17 @@ router = APIRouter(prefix="/api/interactions", tags=["interactions"])
 
 
 @router.get("")
-async def get_all_interactions(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
-    """Tüm etkileşimleri getir"""
+async def get_all_interactions(
+    skip: int = 0, 
+    limit: int = 20, 
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """Tüm etkileşimleri getir (Pagination destekli)"""
     try:
-        result = await db.execute(select(Interaction))
+        # Limit safety
+        if limit > 100: limit = 100
+        
+        result = await db.execute(select(Interaction).offset(skip).limit(limit))
         interactions = result.scalars().all()
         return [{"_id": str(i.id), **{k: v for k, v in i.__dict__.items() if k != "_sa_instance_state"}} for i in interactions]
     except Exception as e:

@@ -68,19 +68,6 @@ async def health_check():
     return {"status": "healthy", "service": "CineMatch API"}
 
 
-@app.get("/api/db-test")
-async def db_test():
-    """Veritabanı bağlantı testi"""
-    from sqlalchemy import text
-    from backend.src.db_pg import engine
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-            return {"status": "success", "message": "Database connection verified!"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

@@ -13,10 +13,17 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 
 @router.get("")
-async def get_all_users(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
-    """Tüm kullanıcıları getir"""
+async def get_all_users(
+    skip: int = 0, 
+    limit: int = 20, 
+    db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """Tüm kullanıcıları getir (Pagination destekli)"""
     try:
-        result = await db.execute(select(User))
+        # Limit safety
+        if limit > 100: limit = 100
+        
+        result = await db.execute(select(User).offset(skip).limit(limit))
         users = result.scalars().all()
         return [{"_id": str(u.id), **{k: v for k, v in u.__dict__.items() if k != "_sa_instance_state"}} for u in users]
     except Exception as e:
