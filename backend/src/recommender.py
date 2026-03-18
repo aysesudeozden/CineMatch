@@ -26,7 +26,8 @@ class CineMatchEngine:
         """Database'deki tüm filmleri çekip matematiksel modele hazırlar."""
         import pandas as pd
         async with async_session_maker() as session:
-            result = await session.execute(select(Movie))
+            # Sunucu belleğinin (RAM) dolmaması ve çökmemesi için sadece en popüler 3000 filmi alıyoruz
+            result = await session.execute(select(Movie).order_by(Movie.popularity.desc()).limit(3000))
             movies_list = [{"movieId": m.movieId, "id": m.id, "title": m.title, "original_language": m.original_language,
                             "vote_average": m.vote_average, "release_date": m.release_date, "popularity": m.popularity,
                             "poster_url": m.poster_url, "llm_metadata": m.llm_metadata} for m in result.scalars().all()]
