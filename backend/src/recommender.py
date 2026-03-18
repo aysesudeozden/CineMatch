@@ -1,183 +1,153 @@
-# Heavy imports moved inside methods to prevent OOM on serverless startup
+# DB-driven recommender - no cosine similarity OOM
 from sqlalchemy.future import select
+from sqlalchemy import desc, and_, or_, func
+import pandas as pd
+import numpy as np
 
 from backend.src.db_pg import engine as db_engine, async_session_maker
-from backend.src.models_pg import Movie, User, Interaction, Genre
+from backend.src.models_pg import Movie, User, Interaction, Genre, MovieGenre
+
 
 class CineMatchEngine:
     def __init__(self):
-        self._movies_df = None  # Lazy loading via property
-        self.cosine_sim = None
-        self.count_matrix = None
         self.is_ready = False
 
-    @property
-    def movies_df(self):
-        import pandas as pd
-        if self._movies_df is None:
-            self._movies_df = pd.DataFrame()
-        return self._movies_df
-
-    @movies_df.setter
-    def movies_df(self, value):
-        self._movies_df = value
-
     async def refresh_data(self):
-        """Database'deki tüm filmleri çekip matematiksel modele hazırlar."""
-        import pandas as pd
-        async with async_session_maker() as session:
-            result = await session.execute(select(Movie))
-            movies_list = [{"movieId": m.movieId, "title": m.title, "original_language": m.original_language,
-                            "vote_average": m.vote_average, "release_date": m.release_date, "popularity": m.popularity,
-                            "poster_url": m.poster_url, "llm_metadata": m.llm_metadata} for m in result.scalars().all()]
-            
-        self.movies_df = pd.DataFrame(movies_list)
-        
-        if self.movies_df.empty:
-            print(" HATA: Veritabanı boş dönüyor!")
-            self.is_ready = False
-            return
-
-        import pandas as pd
-        # Tarih formatı
-        if 'release_date' in self.movies_df.columns:
-            self.movies_df['release_date'] = pd.to_datetime(self.movies_df['release_date'], errors='coerce')
-            self.movies_df['year'] = self.movies_df['release_date'].dt.year.fillna(0).astype(int)
-        
-        import pandas as pd
-        import numpy as np
-        from sklearn.feature_extraction.text import CountVectorizer
-        from sklearn.metrics.pairwise import cosine_similarity
-        from sklearn.preprocessing import MinMaxScaler
-
-        # Metin benzerliği ve popülerlik normalizasyonu.
-        self.count = CountVectorizer(stop_words='english')
-        
-        # Eğer llm_metadata dict ise string'e çevir, string ise doğrudan kullan
-        metadata_series = self.movies_df['llm_metadata'].apply(
-            lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
-        )
-        self.count_matrix = self.count.fit_transform(metadata_series)
-        self.cosine_sim = cosine_similarity(self.count_matrix)
-        
-        # Popülerlik verisini 0-1 arasına sıkıştır
-        scaler = MinMaxScaler()
-        if 'popularity' in self.movies_df.columns:
-            self.movies_df['norm_popularity'] = scaler.fit_transform(self.movies_df[['popularity']].fillna(0))
-        else:
-            self.movies_df['norm_popularity'] = 0
-
+        """Sadece hazır bayrağını ayarlar (ağır hesaplama yok)."""
         self.is_ready = True
-        print(f" Motor Hazır: {len(self.movies_df)} film başarıyla yüklendi.")
+        print(" Motor Hazır (DB-driven mod).")
 
     async def get_genre_names(self, genre_ids):
         """Sayısal Tür ID'lerini 'Action' gibi isimlere çevirir."""
         if not genre_ids:
             return []
-            
         async with async_session_maker() as session:
             result = await session.execute(select(Genre).where(Genre.genre_id.in_(genre_ids)))
             genres = result.scalars().all()
             return [g.genre_name for g in genres]
 
     async def recommend_for_guest(self, selected_genre_ids):
-        """GUEST: Sadece seçtiği 1-3 tür üzerinden popüler olanları getirir."""
-        if not self.is_ready:
-            await self.refresh_data()
-            
-        genre_names = await self.get_genre_names(selected_genre_ids)
-        if not genre_names:
-            top_indices = self.movies_df.sort_values(by='norm_popularity', ascending=False).index[:10]
-            return self.format_output(top_indices)
-            
-        query = "|".join(genre_names)
-        
-        import pandas as pd
-        metadata_series = self.movies_df['llm_metadata'].apply(
-            lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
-        )
-        mask = metadata_series.str.contains(query, case=False, na=False)
-        subset = self.movies_df[mask].copy()
-        
-        if subset.empty:
-            top_indices = self.movies_df.sort_values(by='norm_popularity', ascending=False).index[:10]
-            return self.format_output(top_indices)
-        
-        subset['guest_score'] = subset['vote_average'].fillna(0) * 0.1 + subset['norm_popularity'] * 0.2
-        
-        top_indices = subset.sort_values(by='guest_score', ascending=False).index[:10]
-        return self.format_output(top_indices)
+        """GUEST: Seçili türlerde yüksek puanlı ve popüler filmler döner."""
+        async with async_session_maker() as session:
+            if selected_genre_ids:
+                # Get movies in selected genres
+                genre_movie_ids_result = await session.execute(
+                    select(MovieGenre.movie_id)
+                    .where(MovieGenre.genre_id.in_(selected_genre_ids))
+                    .distinct()
+                )
+                genre_movie_ids = [r[0] for r in genre_movie_ids_result.fetchall()]
+
+                if genre_movie_ids:
+                    stmt = (
+                        select(Movie)
+                        .where(Movie.movieId.in_(genre_movie_ids))
+                        .where(Movie.vote_average > 6.0)
+                        .order_by(desc(Movie.popularity))
+                        .limit(20)
+                    )
+                else:
+                    stmt = select(Movie).order_by(desc(Movie.popularity)).limit(20)
+            else:
+                stmt = select(Movie).order_by(desc(Movie.popularity)).limit(20)
+
+            result = await session.execute(stmt)
+            movies = result.scalars().all()
+
+        return self._format_movies(movies)
 
     async def recommend_for_user(self, user_id):
-        """LOGIN: Kullanıcının selected_genres + beğendiği filmlere bakar."""
-        if not self.is_ready:
-            await self.refresh_data()
-
+        """LOGIN: Kullanıcının selected_genres + beğendiği filmlere göre öneri yapar."""
         async with async_session_maker() as session:
             result_user = await session.execute(select(User).where(User.user_id == user_id))
             user = result_user.scalars().first()
-            if not user: return {"error": "Kullanıcı bulunamadı"}
+            if not user:
+                return {"error": "Kullanıcı bulunamadı"}
 
-            fav_genres_ids = user.selected_genres or []
-            
+            fav_genre_ids = user.selected_genres or []
+
+            # Get liked movie IDs
             result_interact = await session.execute(
-                select(Interaction).where((Interaction.user_id == user_id) & (Interaction.is_liked == True))
+                select(Interaction).where(
+                    and_(Interaction.user_id == user_id, Interaction.is_liked == True)
+                )
             )
-            interactions = result_interact.scalars().all()
+            liked_interactions = result_interact.scalars().all()
+            liked_movie_ids = [i.movie_id for i in liked_interactions]
+            all_watched_ids = [i.movie_id for i in (await session.execute(
+                select(Interaction).where(Interaction.user_id == user_id)
+            )).scalars().all()]
 
-        if not fav_genres_ids and not interactions:
-            top_indices = self.movies_df.sort_values(by='norm_popularity', ascending=False).index[:10]
-            return self.format_output(top_indices)
+            # Build candidate pool: movies in user's fav genres, not yet watched
+            candidate_ids = []
+            if fav_genre_ids:
+                genre_movie_res = await session.execute(
+                    select(MovieGenre.movie_id)
+                    .where(MovieGenre.genre_id.in_(fav_genre_ids))
+                    .distinct()
+                )
+                candidate_ids = [r[0] for r in genre_movie_res.fetchall()]
 
-        fav_genres = await self.get_genre_names(fav_genres_ids)
-        
-        import numpy as np
-        import pandas as pd
-        
-        final_scores = np.zeros(len(self.movies_df))
-        
-        for interact in interactions:
-            m_id = interact.movie_id
-            rating_weight = (interact.rating or 3.0) / 5.0
-            try:
-                idx_list = self.movies_df[self.movies_df['movieId'] == m_id].index
-                
-                if not idx_list.empty:
-                    idx = idx_list[0]
-                    final_scores += self.cosine_sim[idx] * rating_weight
-            except Exception as e:
-                print(f"Benzerlik hesaplama hatası (movie_id: {m_id}): {e}")
-                continue
+            # Also include movies from genres of liked films
+            if liked_movie_ids:
+                liked_genre_ids_res = await session.execute(
+                    select(MovieGenre.genre_id)
+                    .where(MovieGenre.movie_id.in_(liked_movie_ids))
+                    .distinct()
+                )
+                liked_genre_ids = [r[0] for r in liked_genre_ids_res.fetchall()]
+                if liked_genre_ids:
+                    extra_movies_res = await session.execute(
+                        select(MovieGenre.movie_id)
+                        .where(MovieGenre.genre_id.in_(liked_genre_ids))
+                        .distinct()
+                    )
+                    candidate_ids = list(set(candidate_ids + [r[0] for r in extra_movies_res.fetchall()]))
 
-        genre_mask = np.zeros(len(self.movies_df))
-        if fav_genres:
-            genre_query = "|".join(fav_genres)
-            metadata_str = self.movies_df['llm_metadata'].apply(
-                lambda x: str(x) if isinstance(x, dict) else (x if pd.notnull(x) else '')
-            )
-            genre_mask = metadata_str.str.contains(genre_query, case=False, na=False).astype(int).values
-        
-        total_scores = (final_scores * 0.5) + (genre_mask * 0.3) + (self.movies_df['norm_popularity'] * 0.2)
-        
-        top_indices = np.argsort(total_scores)[::-1][:10]
-        return self.format_output(top_indices)
+            # Exclude watched movies
+            candidate_ids = [mid for mid in candidate_ids if mid not in all_watched_ids]
 
-    def format_output(self, indices):
-        """Frontend'e temiz veri döner."""
-        import pandas as pd
+            if not candidate_ids:
+                # Fallback: just popular movies
+                stmt = (
+                    select(Movie)
+                    .where(Movie.movieId.notin_(all_watched_ids) if all_watched_ids else True)
+                    .order_by(desc(Movie.popularity))
+                    .limit(20)
+                )
+            else:
+                stmt = (
+                    select(Movie)
+                    .where(Movie.movieId.in_(candidate_ids))
+                    .where(Movie.vote_average > 5.5)
+                    .order_by(desc(Movie.popularity))
+                    .limit(20)
+                )
+
+            result = await session.execute(stmt)
+            movies = result.scalars().all()
+
+        return self._format_movies(movies)
+
+    def _format_movies(self, movies):
+        """SQLAlchemy model listesini frontend dict listesine çevirir."""
         results = []
-        for idx in indices:
-            row = self.movies_df.iloc[idx]
+        for m in movies:
             results.append({
-                "movieId": int(row['movieId']) if 'movieId' in row and pd.notnull(row['movieId']) else 0,
-                "title": row['title'],
-                "original_language": row.get('original_language', 'en'),
-                "vote_average": float(row['vote_average']) if pd.notnull(row['vote_average']) else 0.0,
-                "release_date": str(row['release_date']) if pd.notnull(row['release_date']) else "",
-                "poster_url": row.get('poster_url', ''),
-                "llm_metadata": row.get('llm_metadata', '')
+                "movieId": m.movieId,
+                "_id": str(m.movieId),
+                "title": m.title,
+                "original_language": m.original_language or "en",
+                "vote_average": m.vote_average or 0.0,
+                "release_date": str(m.release_date) if m.release_date else "",
+                "poster_url": m.poster_url or "",
+                "popularity": m.popularity or 0.0,
+                "llm_metadata": m.llm_metadata or "",
+                "avg_rating": m.avg_rating or 0.0,
+                "rating_count": m.rating_count or 0,
             })
         return results
+
 
 # Singleton instance
 engine = CineMatchEngine()

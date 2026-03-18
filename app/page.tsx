@@ -309,24 +309,32 @@ export default function Home() {
       const popular = await getMovies(0, 15, undefined, undefined, 'popularity');
       setPopularMovies(popular);
 
-      if (selectedGenreIds.length > 0 || user) {
-        const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
-        setRecommendations(recs);
+      // Always fetch recommendations (guest uses selectedGenreIds, logged-in users use their profile)
+      const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
+      setRecommendations(recs);
 
-        // All genres to process
-        const allGenreIds = genres.map(g => g.genre_id);
+      // Always load genre rows — need genres to be loaded first
+      // genres state may be empty if loadGenres hasn't resolved yet; re-fetch inline
+      let genreList = genres;
+      if (genreList.length === 0) {
+        try {
+          const { getGenres: fetchGenres } = await import('@/lib/api');
+          genreList = await fetchGenres();
+          setGenres(genreList);
+        } catch {}
+      }
 
+      if (genreList.length > 0) {
         const allRows = await Promise.all(
-          allGenreIds.map(async (gid) => {
-            const gName = genres.find(g => (g.genre_id === gid))?.genre_name || 'Tür';
-            const movies = await getMovies(0, 10, undefined, [gid]);
-            return { id: gid, name: gName, movies };
+          genreList.map(async (g) => {
+            const movies = await getMovies(0, 10, undefined, [g.genre_id]);
+            return { id: g.genre_id, name: g.genre_name, movies };
           })
         );
 
         const filteredRows = allRows.filter(r => r.movies.length > 0);
 
-        // Bifurcate rows
+        // Bifurcate: user's selected genres first, then rest
         const selectedRows = filteredRows.filter(r => selectedGenreIds.includes(r.id));
         const nonSelectedRows = filteredRows.filter(r => !selectedGenreIds.includes(r.id));
 
