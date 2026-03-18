@@ -164,16 +164,16 @@ export async function searchMovies(query: string): Promise<Movie[]> {
     return fetchAPI<Movie[]>(`/api/movies/search/query?q=${encodeURIComponent(query)}`);
 }
 
-export async function getRecommendations(userId?: number, selectedGenres: number[] = []): Promise<Movie[]> {
+export async function getRecommendations(userId?: number, selectedGenres: number[] = [], skip: number = 0, limit: number = 20): Promise<Movie[]> {
     const response = await fetch(`${API_BASE_URL}/api/recommend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, selected_genres: selectedGenres }),
+        body: JSON.stringify({ user_id: userId, selected_genres: selectedGenres, skip, limit }),
     });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         console.error('Recommendation API error:', err);
-        return []; // Fallback to empty list or handle as needed
+        return [];
     }
     return response.json();
 }

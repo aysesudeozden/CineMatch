@@ -305,20 +305,11 @@ export default function Home() {
 
   const loadHomeData = async () => {
     setLoading(true);
-    // Clear stale data immediately so old results don't show through
-    setPopularMovies([]);
-    setRecommendations([]);
+    // Clear stale genre rows immediately
     setSelectedGenreRows([]);
     setOtherGenreRows([]);
     try {
-      const popular = await getMovies(0, 15, undefined, undefined, 'popularity');
-      setPopularMovies(popular);
-
-      // Always fetch recommendations
-      const recs = await getRecommendations(user?.user_id || undefined, selectedGenreIds);
-      setRecommendations(recs);
-
-      // Always load genre metadata (MovieRow handles its own data)
+      // Always load genre metadata (MovieRow handles its own data fetching + infinite scroll)
       let genreList = genres;
       if (genreList.length === 0) {
         try {
@@ -515,7 +506,13 @@ export default function Home() {
       </section>
 
       <div style={{ marginTop: '-15vh', position: 'relative', zIndex: 10 }}>
-        <MovieRow title="Sizin İçin Önerilenler" movies={recommendations} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
+        <MovieRow
+          title="Sizin İçin Önerilenler"
+          fetchFn={(skip, limit) => getRecommendations(user?.user_id || undefined, selectedGenreIds, skip, limit)}
+          onAdd={addToWatched}
+          onRemove={removeFromWatched}
+          isWatched={isWatched}
+        />
         <MovieRow title="Listem" movies={watchedMovies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
         <MovieRow title="Popüler Filmler" sortBy="popularity" onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
 
@@ -653,9 +650,10 @@ const PAGE_SIZE = 15;
 // MovieRow: self-contained with scroll-based infinite scroll
 const MovieRow = ({
   title,
-  movies: staticMovies,     // static list (e.g. Listem / Önerilenler passed top-level)
+  movies: staticMovies,     // static list (e.g. Listem)
   genreId,                  // for genre rows – fetches its own data
   sortBy,                   // for Popular row – fetches its own data sorted
+  fetchFn,                  // custom fetch function (skip, limit) => Movie[]
   onAdd,
   onRemove,
   isWatched,
@@ -664,6 +662,7 @@ const MovieRow = ({
   movies?: Movie[];
   genreId?: number;
   sortBy?: string;
+  fetchFn?: (skip: number, limit: number) => Promise<Movie[]>;
   onAdd: (m: Movie) => void;
   onRemove: (m: Movie) => void;
   isWatched: (m: Movie) => boolean;
@@ -671,12 +670,17 @@ const MovieRow = ({
   const sliderRef = useRef<HTMLDivElement>(null);
   const [showArrows, setShowArrows] = useState(false);
 
-  // Self-fetching rows (genre or sortBy)
-  const isSelfFetching = genreId !== undefined || sortBy !== undefined;
+  // Self-fetching rows (genre, sortBy, or custom fetchFn)
+  const isSelfFetching = genreId !== undefined || sortBy !== undefined || fetchFn !== undefined;
   const [movies, setMovies] = useState<Movie[]>(staticMovies || []);
   const [skip, setSkip] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+
+  const doFetch = (s: number, l: number): Promise<Movie[]> => {
+    if (fetchFn) return fetchFn(s, l);
+    return getMovies(s, l, undefined, genreId !== undefined ? [genreId] : undefined, sortBy);
+  };
 
   // Initial load for self-fetching rows
   useEffect(() => {
@@ -685,7 +689,7 @@ const MovieRow = ({
     setSkip(0);
     setHasMore(true);
     setIsLoadingMore(true);
-    getMovies(0, PAGE_SIZE, undefined, genreId !== undefined ? [genreId] : undefined, sortBy)
+    doFetch(0, PAGE_SIZE)
       .then(data => {
         setMovies(data);
         setSkip(data.length);
@@ -700,7 +704,7 @@ const MovieRow = ({
   const loadMore = () => {
     if (!isSelfFetching || isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
-    getMovies(skip, PAGE_SIZE, undefined, genreId !== undefined ? [genreId] : undefined, sortBy)
+    doFetch(skip, PAGE_SIZE)
       .then(data => {
         if (data.length === 0) {
           setHasMore(false);

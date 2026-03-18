@@ -8,6 +8,8 @@ router = APIRouter(prefix="/api/recommend", tags=["recommendations"])
 class RecommendationRequest(BaseModel):
     user_id: Optional[int] = None
     selected_genres: Optional[List[int]] = []
+    skip: int = 0
+    limit: int = 20
 
 @router.post("")
 async def get_recommendations(request: RecommendationRequest):
@@ -21,13 +23,9 @@ async def get_recommendations(request: RecommendationRequest):
             await engine.refresh_data()
             
         if request.user_id:
-            results = await engine.recommend_for_user(request.user_id)
+            results = await engine.recommend_for_user(request.user_id, skip=request.skip, limit=request.limit)
         else:
-            if not request.selected_genres:
-                # Misafir için hiçbir tür seçilmemişse en popüler 10 filmi döndür
-                # engine.recommend_for_guest([]) zaten bunu yapabilir ama garantiye alalım
-                pass
-            results = await engine.recommend_for_guest(request.selected_genres)
+            results = await engine.recommend_for_guest(request.selected_genres, skip=request.skip, limit=request.limit)
             
         if isinstance(results, dict) and "error" in results:
             raise HTTPException(status_code=404, detail=results["error"])

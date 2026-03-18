@@ -26,7 +26,7 @@ class CineMatchEngine:
             genres = result.scalars().all()
             return [g.genre_name for g in genres]
 
-    async def recommend_for_guest(self, selected_genre_ids):
+    async def recommend_for_guest(self, selected_genre_ids, skip: int = 0, limit: int = 20):
         """GUEST: Seçili türlerde yüksek puanlı ve popüler filmler döner."""
         async with async_session_maker() as session:
             if selected_genre_ids:
@@ -44,19 +44,20 @@ class CineMatchEngine:
                         .where(Movie.movieId.in_(genre_movie_ids))
                         .where(Movie.vote_average > 6.0)
                         .order_by(desc(Movie.popularity))
-                        .limit(20)
+                        .offset(skip)
+                        .limit(limit)
                     )
                 else:
-                    stmt = select(Movie).order_by(desc(Movie.popularity)).limit(20)
+                    stmt = select(Movie).order_by(desc(Movie.popularity)).offset(skip).limit(limit)
             else:
-                stmt = select(Movie).order_by(desc(Movie.popularity)).limit(20)
+                stmt = select(Movie).order_by(desc(Movie.popularity)).offset(skip).limit(limit)
 
             result = await session.execute(stmt)
             movies = result.scalars().all()
 
         return self._format_movies(movies)
 
-    async def recommend_for_user(self, user_id):
+    async def recommend_for_user(self, user_id, skip: int = 0, limit: int = 20):
         """LOGIN: Kullanıcının selected_genres + beğendiği filmlere göre öneri yapar."""
         async with async_session_maker() as session:
             result_user = await session.execute(select(User).where(User.user_id == user_id))
@@ -113,7 +114,8 @@ class CineMatchEngine:
                     select(Movie)
                     .where(Movie.movieId.notin_(all_watched_ids) if all_watched_ids else True)
                     .order_by(desc(Movie.popularity))
-                    .limit(20)
+                    .offset(skip)
+                    .limit(limit)
                 )
             else:
                 stmt = (
@@ -121,7 +123,8 @@ class CineMatchEngine:
                     .where(Movie.movieId.in_(candidate_ids))
                     .where(Movie.vote_average > 5.5)
                     .order_by(desc(Movie.popularity))
-                    .limit(20)
+                    .offset(skip)
+                    .limit(limit)
                 )
 
             result = await session.execute(stmt)
