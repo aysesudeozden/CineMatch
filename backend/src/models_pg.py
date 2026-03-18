@@ -18,8 +18,7 @@ class User(Base):
 class Movie(Base):
     __tablename__ = "movies"
     
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    movieId = Column(Integer, unique=True, index=True) # Eşdeğer ID (Dataset ID)
+    movieId = Column("movie_id", Integer, primary_key=True, index=True) # Eşdeğer ID (Dataset ID)
     title = Column(String, index=True)
     original_title = Column(String, nullable=True)
     original_language = Column(String, nullable=True)
@@ -29,7 +28,9 @@ class Movie(Base):
     vote_average = Column(Float, nullable=True)
     rating_count = Column(Integer, nullable=True)
     poster_url = Column(String, nullable=True)
-    overview = Column(String, nullable=True)
+    avg_rating = Column(Float, nullable=True)
+    imdbId = Column("imdbid", String, nullable=True)
+    tmdbId = Column("tmdbid", Integer, nullable=True)
     
     # Optional / Extra fields for LLM mappings
     llm_metadata = Column(JSON, nullable=True)
@@ -48,7 +49,7 @@ class MovieGenre(Base):
     __tablename__ = "movie_genres"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    movie_id = Column(Integer, ForeignKey("movies.movieId"), index=True)
+    movie_id = Column(Integer, ForeignKey("movies.movie_id"), index=True)
     genre_id = Column(Integer, ForeignKey("genres.genre_id"), index=True)
 
 
@@ -58,7 +59,7 @@ class Interaction(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     interaction_id = Column(Integer, unique=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
-    movie_id = Column(Integer, ForeignKey("movies.movieId"))
+    movie_id = Column(Integer, ForeignKey("movies.movie_id"))
     is_liked = Column(Boolean, default=False)
     rating = Column(Float, default=0.0)
     
