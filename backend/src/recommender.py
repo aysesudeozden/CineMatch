@@ -1,11 +1,18 @@
 # DB-driven recommender - no cosine similarity OOM
 from sqlalchemy.future import select
-from sqlalchemy import desc, and_, func, text
-import pandas as pd
-import numpy as np
+from sqlalchemy import desc, and_, or_, func, case
 
 from backend.src.db_pg import engine as db_engine, async_session_maker
 from backend.src.models_pg import Movie, User, Interaction, Genre, MovieGenre
+
+
+def _year_weight():
+    """2000+ filmlere 3x, 1985-1999 1x, daha eski 0.3x agirlik verir."""
+    return case(
+        (Movie.release_date >= '2000-01-01', func.random() * 3.0),
+        (Movie.release_date >= '1985-01-01', func.random() * 1.0),
+        else_=func.random() * 0.3
+    ).desc()
 
 
 class CineMatchEngine:
@@ -27,8 +34,7 @@ class CineMatchEngine:
             return [g.genre_name for g in genres]
 
     async def recommend_for_guest(self, selected_genre_ids, skip: int = 0, limit: int = 20):
-        """GUEST: Seçili türlerde yüksek puanlı, yeni filmlere ağırlıklı rastgele sıralamayla döner."""
-        WEIGHTED_RAND = text("RANDOM() * COALESCE(EXTRACT(YEAR FROM release_date), 1970) DESC")
+        """GUEST: Seçili türlerde yıl ağırlıklı rastgele filmler döner (2000+ öncelikli)."""
         async with async_session_maker() as session:
             if selected_genre_ids:
                 genre_movie_ids_result = await session.execute(
@@ -43,18 +49,18 @@ class CineMatchEngine:
                         select(Movie)
                         .where(Movie.movieId.in_(genre_movie_ids))
                         .where(Movie.vote_average > 6.0)
-                        .order_by(WEIGHTED_RAND)
+                        .order_by(_year_weight())
                         .offset(skip)
                         .limit(limit)
                     )
                 else:
                     stmt = (select(Movie)
                             .where(Movie.vote_average > 5.0)
-                            .order_by(WEIGHTED_RAND).offset(skip).limit(limit))
+                            .order_by(_year_weight()).offset(skip).limit(limit))
             else:
                 stmt = (select(Movie)
                         .where(Movie.vote_average > 5.0)
-                        .order_by(WEIGHTED_RAND).offset(skip).limit(limit))
+                        .order_by(_year_weight()).offset(skip).limit(limit))
 
             result = await session.execute(stmt)
             movies = result.scalars().all()
@@ -112,13 +118,12 @@ class CineMatchEngine:
             # Exclude watched movies
             candidate_ids = [mid for mid in candidate_ids if mid not in all_watched_ids]
 
-            WEIGHTED_RAND = text("RANDOM() * COALESCE(EXTRACT(YEAR FROM release_date), 1970) DESC")
             if not candidate_ids:
                 stmt = (
                     select(Movie)
                     .where(Movie.movieId.notin_(all_watched_ids) if all_watched_ids else True)
                     .where(Movie.vote_average > 5.0)
-                    .order_by(WEIGHTED_RAND)
+                    .order_by(_year_weight())
                     .offset(skip)
                     .limit(limit)
                 )
@@ -127,7 +132,7 @@ class CineMatchEngine:
                     select(Movie)
                     .where(Movie.movieId.in_(candidate_ids))
                     .where(Movie.vote_average > 5.5)
-                    .order_by(WEIGHTED_RAND)
+                    .order_by(_year_weight())
                     .offset(skip)
                     .limit(limit)
                 )
