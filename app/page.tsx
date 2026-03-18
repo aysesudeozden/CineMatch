@@ -517,7 +517,7 @@ export default function Home() {
       <div style={{ marginTop: '-15vh', position: 'relative', zIndex: 10 }}>
         <MovieRow title="Sizin İçin Önerilenler" movies={recommendations} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
         <MovieRow title="Listem" movies={watchedMovies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
-        <MovieRow title="Popüler Filmler" movies={popularMovies} onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
+        <MovieRow title="Popüler Filmler" sortBy="popularity" onAdd={addToWatched} onRemove={removeFromWatched} isWatched={isWatched} />
 
         {/* Selected Genres - self-managed infinite scroll rows */}
         {selectedGenreRows.map(row => (
@@ -648,13 +648,14 @@ export default function Home() {
   );
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
-// MovieRow: self-contained with infinite scroll for genre rows
+// MovieRow: self-contained with scroll-based infinite scroll
 const MovieRow = ({
   title,
-  movies: initialMovies,
-  genreId,
+  movies: staticMovies,     // static list (e.g. Listem / Önerilenler passed top-level)
+  genreId,                  // for genre rows – fetches its own data
+  sortBy,                   // for Popular row – fetches its own data sorted
   onAdd,
   onRemove,
   isWatched,
@@ -662,65 +663,79 @@ const MovieRow = ({
   title: string;
   movies?: Movie[];
   genreId?: number;
+  sortBy?: string;
   onAdd: (m: Movie) => void;
   onRemove: (m: Movie) => void;
   isWatched: (m: Movie) => boolean;
 }) => {
   const sliderRef = useRef<HTMLDivElement>(null);
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const [showArrows, setShowArrows] = useState(false);
-  const [movies, setMovies] = useState<Movie[]>(initialMovies || []);
-  const [skip, setSkip] = useState(initialMovies?.length || 0);
+
+  // Self-fetching rows (genre or sortBy)
+  const isSelfFetching = genreId !== undefined || sortBy !== undefined;
+  const [movies, setMovies] = useState<Movie[]>(staticMovies || []);
+  const [skip, setSkip] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
-  // Initial load for genre rows
+  // Initial load for self-fetching rows
   useEffect(() => {
-    if (genreId !== undefined && movies.length === 0) {
-      setIsLoadingMore(true);
-      getMovies(0, PAGE_SIZE, undefined, [genreId])
-        .then(data => {
-          setMovies(data);
-          setSkip(data.length);
+    if (!isSelfFetching) return;
+    setMovies([]);
+    setSkip(0);
+    setHasMore(true);
+    setIsLoadingMore(true);
+    getMovies(0, PAGE_SIZE, undefined, genreId !== undefined ? [genreId] : undefined, sortBy)
+      .then(data => {
+        setMovies(data);
+        setSkip(data.length);
+        setHasMore(data.length === PAGE_SIZE);
+      })
+      .catch(console.error)
+      .finally(() => setIsLoadingMore(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genreId, sortBy]);
+
+  // Load more function
+  const loadMore = () => {
+    if (!isSelfFetching || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    getMovies(skip, PAGE_SIZE, undefined, genreId !== undefined ? [genreId] : undefined, sortBy)
+      .then(data => {
+        if (data.length === 0) {
+          setHasMore(false);
+        } else {
+          setMovies(prev => {
+            const existingIds = new Set(prev.map(m => getMovieId(m)));
+            return [...prev, ...data.filter(m => !existingIds.has(getMovieId(m)))];
+          });
+          setSkip(prev => prev + data.length);
           setHasMore(data.length === PAGE_SIZE);
-        })
-        .catch(console.error)
-        .finally(() => setIsLoadingMore(false));
-    }
-  }, [genreId]);
-
-  // Infinite scroll sentinel
-  useEffect(() => {
-    if (!genreId || !hasMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isLoadingMore) {
-          setIsLoadingMore(true);
-          getMovies(skip, PAGE_SIZE, undefined, [genreId])
-            .then(data => {
-              if (data.length === 0) {
-                setHasMore(false);
-              } else {
-                setMovies(prev => {
-                  const existingIds = new Set(prev.map(m => getMovieId(m)));
-                  const newMovies = data.filter(m => !existingIds.has(getMovieId(m)));
-                  return [...prev, ...newMovies];
-                });
-                setSkip(prev => prev + data.length);
-                setHasMore(data.length === PAGE_SIZE);
-              }
-            })
-            .catch(console.error)
-            .finally(() => setIsLoadingMore(false));
         }
-      },
-      { threshold: 0.1 }
-    );
-    if (sentinelRef.current) observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [genreId, skip, isLoadingMore, hasMore]);
+      })
+      .catch(console.error)
+      .finally(() => setIsLoadingMore(false));
+  };
 
-  if (!isLoadingMore && movies.length === 0) return null;
+  // Scroll-based infinite trigger
+  useEffect(() => {
+    if (!isSelfFetching) return;
+    const el = sliderRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      // Trigger when within 300px of the right end
+      if (scrollWidth - scrollLeft - clientWidth < 300) {
+        loadMore();
+      }
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSelfFetching, skip, isLoadingMore, hasMore]);
+
+  const displayMovies = isSelfFetching ? movies : (staticMovies || []);
+  if (!isLoadingMore && displayMovies.length === 0) return null;
 
   const scroll = (direction: 'left' | 'right') => {
     if (sliderRef.current) {
@@ -773,7 +788,7 @@ const MovieRow = ({
       </button>
 
       <div style={styles.rowSlider} className="no-scrollbar" ref={sliderRef}>
-        {movies.map((movie: any) => (
+        {displayMovies.map((movie: any) => (
           <div key={getMovieId(movie)} style={styles.sliderItem}>
             <MovieCard
               movie={movie}
@@ -783,29 +798,23 @@ const MovieRow = ({
             />
           </div>
         ))}
-        {/* Infinite scroll sentinel + loading spinner */}
-        {genreId !== undefined && (
-          <div
-            ref={sentinelRef}
-            style={{
-              flexShrink: 0,
-              width: isLoadingMore ? '120px' : '1px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'width 0.3s',
-            }}
-          >
-            {isLoadingMore && (
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '50%',
-                border: '3px solid rgba(229, 9, 20, 0.2)',
-                borderTop: '3px solid #e50914',
-                animation: 'spin 0.8s linear infinite',
-              }} />
-            )}
+        {/* Loading spinner at the end */}
+        {isSelfFetching && isLoadingMore && (
+          <div style={{
+            flexShrink: 0,
+            width: '120px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              border: '3px solid rgba(229, 9, 20, 0.2)',
+              borderTop: '3px solid #e50914',
+              animation: 'spin 0.8s linear infinite',
+            }} />
           </div>
         )}
       </div>
@@ -813,3 +822,5 @@ const MovieRow = ({
     </div>
   );
 };
+
+
