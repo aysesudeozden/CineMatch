@@ -27,7 +27,7 @@ class CineMatchEngine:
         import pandas as pd
         async with async_session_maker() as session:
             result = await session.execute(select(Movie))
-            movies_list = [{"movieId": m.movieId, "id": m.id, "title": m.title, "original_language": m.original_language,
+            movies_list = [{"movieId": m.movieId, "title": m.title, "original_language": m.original_language,
                             "vote_average": m.vote_average, "release_date": m.release_date, "popularity": m.popularity,
                             "poster_url": m.poster_url, "llm_metadata": m.llm_metadata} for m in result.scalars().all()]
             
@@ -44,11 +44,6 @@ class CineMatchEngine:
             self.movies_df['release_date'] = pd.to_datetime(self.movies_df['release_date'], errors='coerce')
             self.movies_df['year'] = self.movies_df['release_date'].dt.year.fillna(0).astype(int)
         
-        # Beyni (Matematiksel Motoru) Hazırla
-        self.prepare_engine()
-        self.is_ready = True
-        print(f" Motor Hazır: {len(self.movies_df)} film başarıyla yüklendi.")
-
         import pandas as pd
         import numpy as np
         from sklearn.feature_extraction.text import CountVectorizer
@@ -71,6 +66,9 @@ class CineMatchEngine:
             self.movies_df['norm_popularity'] = scaler.fit_transform(self.movies_df[['popularity']].fillna(0))
         else:
             self.movies_df['norm_popularity'] = 0
+
+        self.is_ready = True
+        print(f" Motor Hazır: {len(self.movies_df)} film başarıyla yüklendi.")
 
     async def get_genre_names(self, genre_ids):
         """Sayısal Tür ID'lerini 'Action' gibi isimlere çevirir."""
@@ -143,8 +141,6 @@ class CineMatchEngine:
             rating_weight = (interact.rating or 3.0) / 5.0
             try:
                 idx_list = self.movies_df[self.movies_df['movieId'] == m_id].index
-                if idx_list.empty:
-                    idx_list = self.movies_df[self.movies_df['id'] == m_id].index
                 
                 if not idx_list.empty:
                     idx = idx_list[0]
@@ -173,7 +169,7 @@ class CineMatchEngine:
         for idx in indices:
             row = self.movies_df.iloc[idx]
             results.append({
-                "movieId": int(row['movieId']) if 'movieId' in row and pd.notnull(row['movieId']) else int(row['id']) if 'id' in row and pd.notnull(row['id']) else 0,
+                "movieId": int(row['movieId']) if 'movieId' in row and pd.notnull(row['movieId']) else 0,
                 "title": row['title'],
                 "original_language": row.get('original_language', 'en'),
                 "vote_average": float(row['vote_average']) if pd.notnull(row['vote_average']) else 0.0,
