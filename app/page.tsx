@@ -177,6 +177,29 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Brute-force koruması
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [lockoutRemaining, setLockoutRemaining] = useState(0);
+
+  // Şifre güç hesaplama
+  const getPasswordStrength = (p: string): { score: number; label: string; color: string } => {
+    let score = 0;
+    if (p.length >= 8) score++;
+    if (p.length >= 12) score++;
+    if (/[A-Z]/.test(p)) score++;
+    if (/[0-9]/.test(p)) score++;
+    if (/[^A-Za-z0-9]/.test(p)) score++;
+    if (score <= 1) return { score, label: 'Çok Zayıf', color: '#e50914' };
+    if (score === 2) return { score, label: 'Zayıf', color: '#ff6b35' };
+    if (score === 3) return { score, label: 'Orta', color: '#ffc107' };
+    if (score === 4) return { score, label: 'Güçlü', color: '#4caf50' };
+    return { score, label: 'Çok Güçlü', color: '#00e676' };
+  };
+
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
   // Genre selection
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -264,11 +287,31 @@ export default function Home() {
   };
 
   const handleAuth = async () => {
+    // Lockout kontrolü
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      setAuthError(`Çok fazla hatalı deneme. ${remaining} saniye bekleyin.`);
+      return;
+    }
+
+    // Frontend validasyon
+    if (!isValidEmail(email)) {
+      setAuthError('Geçerli bir email adresi giriniz.');
+      return;
+    }
+    if (!isLogin) {
+      if (!fullName.trim()) { setAuthError('Ad soyad zorunludur.'); return; }
+      if (password.length < 8) { setAuthError('Şifre en az 8 karakter olmalıdır.'); return; }
+      if (password !== confirmPassword) { setAuthError('Şifreler eşleşmiyor.'); return; }
+    }
+
     setLoading(true);
     try {
       if (isLogin) {
         const res = await loginUser(email, password);
         setUser(res.user);
+        setFailedAttempts(0);
+        setLockoutUntil(null);
         localStorage.setItem('currentUser', JSON.stringify(res.user));
         if (res.user.selected_genres && res.user.selected_genres.length > 0) {
           setSelectedGenreIds(res.user.selected_genres);
@@ -284,11 +327,32 @@ export default function Home() {
         setStep('home');
       }
     } catch (e: any) {
-      setAuthError(e.message);
+      if (isLogin) {
+        const attempts = failedAttempts + 1;
+        setFailedAttempts(attempts);
+        if (attempts >= 3) {
+          const until = Date.now() + 30_000;
+          setLockoutUntil(until);
+          // Geri sayım
+          let remaining = 30;
+          setLockoutRemaining(remaining);
+          const timer = setInterval(() => {
+            remaining--;
+            setLockoutRemaining(remaining);
+            if (remaining <= 0) clearInterval(timer);
+          }, 1000);
+          setAuthError(`3 hatalı deneme. 30 saniye boyunca kilitlendi.`);
+        } else {
+          setAuthError(e.message);
+        }
+      } else {
+        setAuthError(e.message);
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleOnboarding = async () => {
     if (selectedGenreIds.length >= 1 && selectedGenreIds.length <= 3) {
@@ -318,7 +382,7 @@ export default function Home() {
           const { getGenres: fetchGenres } = await import('@/lib/api');
           genreList = await fetchGenres();
           setGenres(genreList);
-        } catch {}
+        } catch { }
       }
 
       if (genreList.length > 0) {
@@ -557,31 +621,14 @@ export default function Home() {
       </div>
       {showAuthModal && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
         }}>
-          <div style={{ ...styles.authCard, position: 'relative' }}>
+          <div style={{ ...styles.authCard, position: 'relative', overflowY: 'auto', maxHeight: '90vh' }}>
             <button
               onClick={() => setShowAuthModal(false)}
-              style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                background: 'none',
-                border: 'none',
-                color: 'white',
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-              }}
+              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer' }}
             >
               ✕
             </button>
@@ -596,12 +643,22 @@ export default function Home() {
                 onChange={(e) => setFullName(e.target.value)}
               />
             )}
+
+            {/* Email */}
             <input
-              style={styles.input}
+              style={{
+                ...styles.input,
+                borderColor: email && !isValidEmail(email) ? '#e50914' : '#2a3548'
+              }}
               placeholder="Email Adresiniz"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
+            {email && !isValidEmail(email) && (
+              <p style={{ color: '#e50914', fontSize: '0.8rem', marginTop: '-0.75rem', marginBottom: '0.75rem' }}>Geçerli bir email giriniz.</p>
+            )}
+
+            {/* Şifre */}
             <input
               style={styles.input}
               type="password"
@@ -610,12 +667,67 @@ export default function Home() {
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button style={styles.startBtn} onClick={handleAuth} disabled={loading}>
+            {/* Şifre güç göstergesi (sadece kayıt formunda) */}
+            {!isLogin && password && (() => {
+              const { score, label, color } = getPasswordStrength(password);
+              return (
+                <div style={{ marginTop: '-0.75rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                    {[1,2,3,4,5].map(i => (
+                      <div key={i} style={{
+                        flex: 1, height: '4px', borderRadius: '2px',
+                        backgroundColor: i <= score ? color : '#2a3548',
+                        transition: '0.3s'
+                      }} />
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.78rem', color }}>{label}</p>
+                </div>
+              );
+            })()}
+
+            {/* Şifre tekrar (sadece kayıt) */}
+            {!isLogin && (
+              <>
+                <input
+                  style={{
+                    ...styles.input,
+                    borderColor: confirmPassword && password !== confirmPassword ? '#e50914' : '#2a3548'
+                  }}
+                  type="password"
+                  placeholder="Şifrenizi Tekrar Girin"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                {confirmPassword && password !== confirmPassword && (
+                  <p style={{ color: '#e50914', fontSize: '0.8rem', marginTop: '-0.75rem', marginBottom: '0.75rem' }}>Şifreler eşleşmiyor.</p>
+                )}
+              </>
+            )}
+
+            {/* Kilitli uyarısı */}
+            {lockoutUntil && Date.now() < lockoutUntil && (
+              <div style={{ background: 'rgba(229,9,20,0.15)', border: '1px solid #e50914', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1rem', textAlign: 'center', fontSize: '0.9rem', color: '#ff6b6b' }}>
+                🔒 {lockoutRemaining} saniye sonra tekrar deneyebilirsiniz.
+              </div>
+            )}
+
+            <button
+              style={{
+                ...styles.startBtn,
+                opacity: (lockoutUntil && Date.now() < lockoutUntil) || loading ? 0.5 : 1
+              }}
+              onClick={handleAuth}
+              disabled={loading || !!(lockoutUntil && Date.now() < lockoutUntil)}
+            >
               {loading ? 'İşleniyor...' : (isLogin ? 'Giriş Yap' : 'Kayıt Ol')}
             </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-              <p style={{ textAlign: 'center', cursor: 'pointer', color: '#7a8ba3' }} onClick={() => setIsLogin(!isLogin)}>
+              <p
+                style={{ textAlign: 'center', cursor: 'pointer', color: '#7a8ba3' }}
+                onClick={() => { setIsLogin(!isLogin); setPassword(''); setConfirmPassword(''); setFailedAttempts(0); setLockoutUntil(null); }}
+              >
                 {isLogin ? 'Hesabınız yok mu? Kayıt olun.' : 'Zaten hesabınız var mı? Giriş yapın.'}
               </p>
               <button style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontWeight: 600 }} onClick={() => setShowAuthModal(false)}>
@@ -726,7 +838,7 @@ const MovieRow = ({
       })
       .catch(console.error)
       .finally(() => setIsLoadingMore(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [genreId, sortBy]);
 
   // Load more function
@@ -764,7 +876,7 @@ const MovieRow = ({
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSelfFetching, skip, isLoadingMore, hasMore]);
 
   const displayMovies = isSelfFetching ? movies : (staticMovies || []);

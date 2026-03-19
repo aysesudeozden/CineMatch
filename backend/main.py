@@ -2,9 +2,13 @@
 CineMatch FastAPI Backend
 PostgreSQL (Neon.tech) ile film öneri sistemi backend API'si
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # PostgreSQL bağlantı fonksiyonları
 from backend.src.db_pg import init_db, close_db
@@ -16,13 +20,8 @@ from backend.routes import users, movies, interactions, genres, chat, recommenda
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Uygulama başlangıç ve kapanış olayları"""
-    # Başlangıç
     await init_db()
-    # Öneri motorunu burada başlatmıyoruz (Vercel memory/timeout sınırları için)
-    # İlk kullanımda (lazy-loading) yüklenecek.
     yield
-    
-    # Kapanış
     await close_db()
 
 
@@ -34,12 +33,26 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware ekle (frontend ile iletişim için)
+# slowapi rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware — sadece bilinen origin'lere izin ver
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    os.environ.get("NEXT_PUBLIC_APP_URL", ""),          # Vercel URL (env'den)
+    "https://cine-match-gamma.vercel.app",              # Vercel production URL
+]
+# Boş string'leri temizle
+ALLOWED_ORIGINS = [o for o in ALLOWED_ORIGINS if o]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Vercel deployment ve local için geniş izin
-    allow_credentials=False, # allow_origins="*" ise bu False olmalı
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -50,6 +63,7 @@ app.include_router(interactions.router)
 app.include_router(genres.router)
 app.include_router(chat.router)
 app.include_router(recommendations.router)
+
 
 
 @app.get("/")
