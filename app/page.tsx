@@ -677,8 +677,20 @@ const MovieRow = ({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
+  // Use refs to keep scroll handler up-to-date without re-registering
+  const skipRef = useRef(skip);
+  const isLoadingMoreRef = useRef(isLoadingMore);
+  const hasMoreRef = useRef(hasMore);
+  useEffect(() => { skipRef.current = skip; }, [skip]);
+  useEffect(() => { isLoadingMoreRef.current = isLoadingMore; }, [isLoadingMore]);
+  useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
+
+  // Keep fetchFn in a ref so scroll handler always calls latest version
+  const fetchFnRef = useRef(fetchFn);
+  useEffect(() => { fetchFnRef.current = fetchFn; }, [fetchFn]);
+
   const doFetch = (s: number, l: number): Promise<Movie[]> => {
-    if (fetchFn) return fetchFn(s, l);
+    if (fetchFnRef.current) return fetchFnRef.current(s, l);
     return getMovies(s, l, undefined, genreId !== undefined ? [genreId] : undefined, sortBy);
   };
 
@@ -687,41 +699,63 @@ const MovieRow = ({
     if (!isSelfFetching) return;
     setMovies([]);
     setSkip(0);
+    skipRef.current = 0;
     setHasMore(true);
+    hasMoreRef.current = true;
     setIsLoadingMore(true);
-    doFetch(0, PAGE_SIZE)
+    isLoadingMoreRef.current = true;
+    const currentFetch = fetchFnRef.current;
+    const fn = currentFetch
+      ? (s: number, l: number) => currentFetch(s, l)
+      : (s: number, l: number) => getMovies(s, l, undefined, genreId !== undefined ? [genreId] : undefined, sortBy);
+    fn(0, PAGE_SIZE)
       .then(data => {
         setMovies(data);
         setSkip(data.length);
+        skipRef.current = data.length;
         setHasMore(data.length === PAGE_SIZE);
+        hasMoreRef.current = data.length === PAGE_SIZE;
       })
       .catch(console.error)
-      .finally(() => setIsLoadingMore(false));
+      .finally(() => {
+        setIsLoadingMore(false);
+        isLoadingMoreRef.current = false;
+      });
+  // fetchFn değiştiğinde de yeniden yükle (örn. kullanıcı giriş/çıkışı)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [genreId, sortBy]);
+  }, [genreId, sortBy, fetchFn]);
 
-  // Load more function
+  // Load more function – reads state via refs to avoid stale closures
   const loadMore = () => {
-    if (!isSelfFetching || isLoadingMore || !hasMore) return;
+    if (!isSelfFetching || isLoadingMoreRef.current || !hasMoreRef.current) return;
     setIsLoadingMore(true);
-    doFetch(skip, PAGE_SIZE)
+    isLoadingMoreRef.current = true;
+    const currentSkip = skipRef.current;
+    doFetch(currentSkip, PAGE_SIZE)
       .then(data => {
         if (data.length === 0) {
           setHasMore(false);
+          hasMoreRef.current = false;
         } else {
           setMovies(prev => {
             const existingIds = new Set(prev.map(m => getMovieId(m)));
             return [...prev, ...data.filter(m => !existingIds.has(getMovieId(m)))];
           });
-          setSkip(prev => prev + data.length);
+          const newSkip = currentSkip + data.length;
+          setSkip(newSkip);
+          skipRef.current = newSkip;
           setHasMore(data.length === PAGE_SIZE);
+          hasMoreRef.current = data.length === PAGE_SIZE;
         }
       })
       .catch(console.error)
-      .finally(() => setIsLoadingMore(false));
+      .finally(() => {
+        setIsLoadingMore(false);
+        isLoadingMoreRef.current = false;
+      });
   };
 
-  // Scroll-based infinite trigger
+  // Scroll-based infinite trigger – registered once, uses refs for fresh state
   useEffect(() => {
     if (!isSelfFetching) return;
     const el = sliderRef.current;
@@ -736,7 +770,7 @@ const MovieRow = ({
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSelfFetching, skip, isLoadingMore, hasMore]);
+  }, [isSelfFetching]);
 
   const displayMovies = isSelfFetching ? movies : (staticMovies || []);
   if (!isLoadingMore && displayMovies.length === 0) return null;
