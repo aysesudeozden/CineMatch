@@ -26,13 +26,26 @@ class ChatRequest(BaseModel):
 
 class CineMatchEngine:
     def __init__(self):
-        # OpenAI API Key .env'den alınır
-        api_key = os.getenv("OPENAI_API_KEY")
-        # Asenkron client kullan
-        self.client = AsyncOpenAI(api_key=api_key)
+        self._client = None
+
+    @property
+    def client(self):
+        """OpenAI istemcisini lazily (gerektiğinde) döndürür."""
+        if self._client is None:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                # API Key eksikliğini daha sonra metod içinde yakalamak için burada raise etmiyoruz
+                # Sadece client'ı None bırakıyoruz.
+                return None
+            self._client = AsyncOpenAI(api_key=api_key)
+        return self._client
 
     async def get_personalized_recommendation(self, user_id: int, user_message: str):
         try:
+            # Client'ın varlığını kontrol et
+            if self.client is None:
+                return "OpenAI API anahtarı yapılandırılmamış. Lütfen yönetici ile iletişime geçin."
+
             async with async_session_maker() as session:
                 # 1. Kullanıcıyı ve Tercihlerini Çek
                 result_user = await session.execute(select(User).where(User.user_id == user_id))
